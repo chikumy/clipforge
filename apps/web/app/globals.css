@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root { --bg: #fafafa; --fg: #0f1115; --muted: #5b6270; --card: #fff; --line: #e4e6eb; --accent: #5b4bff; }
+.dark { --bg: #0b0d12; --fg: #eef0f5; --muted: #98a0b3; --card: #12151c; --line: #232838; --accent: #8b7dff; }
+@media (prefers-color-scheme: dark) { :root:not(.light) { --bg: #0b0d12; --fg: #eef0f5; --muted: #98a0b3; --card: #12151c; --line: #232838; --accent: #8b7dff; } }
+
+body { background: var(--bg); color: var(--fg); font-family: ui-sans-serif, system-ui, sans-serif; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 0.75rem; padding: 1.5rem; }
+.input { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 0.5rem; padding: 0.55rem 0.75rem; }
+.btn { background: var(--accent); color: #fff; border-radius: 0.5rem; padding: 0.55rem 1rem; font-weight: 600; }
+.btn-ghost { border: 1px solid var(--line); border-radius: 0.5rem; padding: 0.45rem 0.8rem; }
+.muted { color: var(--muted); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

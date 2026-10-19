@@ -1,0 +1,3 @@
+# Milestone 1 needs no containers beyond the Supabase CLI stack (`supabase start`).
+# Redis and MinIO arrive with the worker in Milestone 2.
+services: {}

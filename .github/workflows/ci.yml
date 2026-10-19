@@ -1,0 +1,56 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_PASSWORD: postgres }
+        ports: ["54329:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm test:db
+        env: { TEST_DATABASE_URL: "postgres://postgres:postgres@127.0.0.1:54329/postgres" }
+      - run: pnpm build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
+          NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3000
+      - run: pnpm --filter web exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+        env: { CI: "true" }
+
+  # Real Supabase stack: auth + PostgREST + the actual migrations (not the test shim).
+  e2e-journey:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - uses: supabase/setup-cli@v1
+      - run: pnpm install --frozen-lockfile
+      - run: supabase start
+      - name: Export local keys
+        run: |
+          supabase status -o env | sed -n 's/^API_URL=/NEXT_PUBLIC_SUPABASE_URL=/p;s/^ANON_KEY=/NEXT_PUBLIC_SUPABASE_ANON_KEY=/p' >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3000" >> "$GITHUB_ENV"
+      - run: pnpm build
+      - run: pnpm --filter web exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+        env: { CI: "true", E2E_FULL: "1" }
