@@ -1,4 +1,4 @@
-# Local development only. Not tested against a real `supabase start` in Milestone 1's authoring session.
+# Local development only. Verified by `supabase start` in CI (e2e-journey job).
 project_id = "clipforge"
 
 [api]

@@ -17,11 +17,10 @@
 | `pnpm typecheck` | clean |
 | `pnpm build` | succeeds |
 | `pnpm test:e2e` smoke (5 tests, no Supabase) | 5 passed |
-| Full user journey e2e | written, **not run** (needs Docker + Supabase stack; runs in CI job `e2e-journey`) |
+| Full user journey e2e (sign up, workspace, invite, accept, access limits) | passed in CI job `e2e-journey` against a real local Supabase stack (commit 2252b82) |
 
 ## Not verified
-- The migration was tested on plain Postgres 16 with `supabase/tests/supabase-shim.sql` standing in for `auth.users`, `auth.uid()` and the API roles. It has **not** been applied to a real Supabase project. Run `supabase db reset` and the journey e2e before relying on it.
-- `supabase/config.toml` is hand-written and untested.
+- The migration has been applied by CI to a local Supabase stack (`supabase start`), but not yet to a hosted staging project.
 - Email delivery: none configured. Invitations are shared as links; auth emails use Supabase's built-in sender, which is rate-limited and for development only.
 
 ## Configuration still required
