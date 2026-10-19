@@ -48,8 +48,13 @@ jobs:
       - run: supabase start
       - name: Export local keys
         run: |
-          supabase status -o env | sed -n 's/^API_URL=/NEXT_PUBLIC_SUPABASE_URL=/p;s/^ANON_KEY=/NEXT_PUBLIC_SUPABASE_ANON_KEY=/p' >> "$GITHUB_ENV"
-          echo "NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3000" >> "$GITHUB_ENV"
+          supabase status -o json > status.json
+          echo "status keys: $(jq -r 'keys | join(",")' status.json)"  # names only, no values
+          url=$(jq -r '.API_URL // .SUPABASE_URL // empty' status.json)
+          key=$(jq -r '.ANON_KEY // .PUBLISHABLE_KEY // .SUPABASE_PUBLISHABLE_KEY // empty' status.json)
+          test -n "$url" && test -n "$key" || { echo "could not find API URL / anon key in supabase status"; exit 1; }
+          echo "::add-mask::$key"
+          { echo "NEXT_PUBLIC_SUPABASE_URL=$url"; echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$key"; echo "NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3000"; } >> "$GITHUB_ENV"
       - run: pnpm build
       - run: pnpm --filter web exec playwright install --with-deps chromium
       - run: pnpm test:e2e
