@@ -7,6 +7,8 @@ describe("permissions", () => {
     expect(ROLES.filter((r) => can(r, "workspace.delete"))).toEqual(["owner"]);
     expect(ROLES.filter((r) => can(r, "members.invite"))).toEqual(["owner", "admin"]);
     expect(ROLES.every((r) => can(r, "members.view"))).toBe(true);
+    expect(ROLES.filter((r) => can(r, "assets.upload"))).toEqual(["owner", "admin", "editor"]);
+    expect(ROLES.every((r) => can(r, "assets.view"))).toBe(true);
     expect(can(null, "members.view")).toBe(false);
   });
   it("limits who can assign owner", () => {

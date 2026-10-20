@@ -1,3 +1,15 @@
-# Milestone 1 needs no containers beyond the Supabase CLI stack (`supabase start`).
-# Redis and MinIO arrive with the worker in Milestone 2.
-services: {}
+# Local object storage and queue for uploads. Supabase itself runs via `supabase start`.
+# The S3 server is moto, a development mock: it does NOT enforce signed-upload size/type rules.
+# Production must use a real S3-compatible store (AWS S3, Cloudflare R2, ...).
+services:
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
+  s3:
+    image: motoserver/moto:latest
+    ports: ["5000:5000"]
+  s3-setup:
+    image: amazon/aws-cli
+    depends_on: [s3]
+    environment: { AWS_ACCESS_KEY_ID: test, AWS_SECRET_ACCESS_KEY: test, AWS_DEFAULT_REGION: us-east-1 }
+    entrypoint: ["/bin/sh", "-c", "until aws --endpoint-url http://s3:5000 s3 mb s3://clipforge-dev; do sleep 1; done"]

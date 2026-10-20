@@ -49,3 +49,25 @@ test("owner creates a workspace, invites a guest, and the guest sees only that w
   expect(resp?.status()).toBe(404);
   await ctx.close();
 });
+
+// Needs MinIO, Redis and the worker running as well (CI starts them); E2E_VIDEO is a small real MP4.
+test("an editor uploads a video, it is checked and shown ready; a fake video is rejected", async ({ page }) => {
+  test.skip(!process.env.E2E_VIDEO, "needs storage, queue and worker");
+  await signUpAndIn(page, `video${stamp}@example.com`, "Vera Video");
+  await page.getByLabel("Workspace name").fill("Video Co");
+  await page.getByRole("button", { name: "Create workspace" }).click();
+  await page.getByRole("link", { name: "Videos" }).click();
+  await expect(page.getByText("No videos yet")).toBeVisible();
+
+  await page.setInputFiles('input[type="file"]', process.env.E2E_VIDEO!);
+  await page.getByRole("button", { name: "Upload" }).click();
+  const ready = page.getByRole("row", { name: /ok\.mp4/ });
+  await expect(ready).toContainText("Ready", { timeout: 60_000 });
+  await expect(ready).toContainText("320×240");
+
+  await page.setInputFiles('input[type="file"]', { name: "fake.mp4", mimeType: "video/mp4", buffer: Buffer.from("#EXTM3U\nfile:///etc/passwd\n") });
+  await page.getByRole("button", { name: "Upload" }).click();
+  const bad = page.getByRole("row", { name: /fake\.mp4/ });
+  await expect(bad).toContainText("Rejected", { timeout: 60_000 });
+  await expect(bad).toContainText("Unsupported video format");
+});

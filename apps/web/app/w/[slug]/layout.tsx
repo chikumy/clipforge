@@ -16,6 +16,7 @@ export default async function WorkspaceLayout({ children, params }: { children: 
         <nav aria-label="Workspace" className="flex flex-wrap items-center gap-4">
           <strong>ClipForge</strong>
           <Link href={`/w/${slug}`}>Dashboard</Link>
+          <Link href={`/w/${slug}/assets`}>Videos</Link>
           <Link href={`/w/${slug}/members`}>Members</Link>
           <Link href={`/w/${slug}/settings`}>Settings</Link>
         </nav>

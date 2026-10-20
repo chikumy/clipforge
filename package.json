@@ -2,20 +2,28 @@
   "name": "clipforge",
   "private": true,
   "packageManager": "pnpm@10.28.0",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "pnpm --filter web dev",
     "build": "pnpm --filter web build",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run --project unit",
     "test:db": "vitest run --project db",
-    "test:e2e": "pnpm --filter web test:e2e"
+    "test:e2e": "pnpm --filter web test:e2e",
+    "test:s3": "vitest run --project s3"
   },
   "devDependencies": {
     "@types/node": "26.6.5",
     "@types/pg": "8.23.1",
     "pg": "8.23.1",
     "typescript": "5.9.3",
-    "vitest": "5.0.5"
+    "vitest": "5.0.5",
+    "@aws-sdk/client-s3": "3.1153.0",
+    "@aws-sdk/s3-presigned-post": "3.1153.0",
+    "bullmq": "6.3.18",
+    "ioredis": "6.0.0",
+    "@clipforge/shared": "workspace:*"
   }
 }

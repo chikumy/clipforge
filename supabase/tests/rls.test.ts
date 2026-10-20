@@ -280,6 +280,97 @@ describe("invitations", () => {
   });
 });
 
+describe("assets and jobs", () => {
+  const create = (ws = wsA, name = "talk.mp4", type = "video/mp4", size = 1000) =>
+    `select * from public.create_asset_upload('${ws}', '${name}', '${type}', ${size})`;
+
+  it("lets owner/admin/editor start an upload, not viewers or other tenants", async () => {
+    for (const uid of [alice, bob, carol]) expect(await rows(uid, create())).toHaveLength(1);
+    expect(await rejects(dave, create())).toMatch(/do not have permission/);
+    expect(await rejects(erin, create())).toMatch(/do not have permission/);
+    expect(await rejects(null, create())).toMatch(/permission denied/);
+  });
+
+  it("builds the storage key from ids, never from the filename", async () => {
+    const key = await as(carol, async () => {
+      const a = (await db.query(create(wsA, "../../etc/passwd.mp4"))).rows[0];
+      await db.query("reset role"); // storage_key is hidden from clients; read it as the superuser
+      const k = (await db.query("select storage_key from public.assets where id = $1", [a.id])).rows[0].storage_key;
+      return { k, id: a.id, name: a.original_filename };
+    });
+    expect(key.k).toBe(`workspaces/${wsA}/assets/${key.id}/source`); // must match assetStorageKey() in packages/shared
+    expect(key.name).toBe("../../etc/passwd.mp4"); // kept only as a display label
+  });
+
+  it("rejects unsupported types and bad sizes at the database", async () => {
+    expect(await rejects(alice, create(wsA, "a.exe", "application/x-msdownload"))).toMatch(/check constraint/);
+    expect(await rejects(alice, create(wsA, "a.mp4", "video/mp4", 0))).toMatch(/check constraint/);
+    expect(await rejects(alice, create(wsA, "a.mp4", "video/mp4", 5368709121))).toMatch(/check constraint/);
+  });
+
+  it("limits unfinished uploads per workspace", async () => {
+    const msg = await as(alice, async () => {
+      for (let i = 0; i < 20; i++) await db.query(create());
+      await db.query("savepoint s");
+      try { await db.query(create()); } catch (e) { return (e as Error).message; }
+      return "";
+    });
+    expect(msg).toMatch(/Too many unfinished uploads/);
+  });
+
+  it("shows assets to members only, and hides the storage key", async () => {
+    const id = await as(alice, async () => (await db.query(create())).rows[0].id);
+    expect(id).toBeTruthy();
+    await db.query("insert into public.assets (id, workspace_id, original_filename, content_type, size_bytes, storage_key) values ('00000000-0000-0000-0000-0000000000a1', $1, 'seed.mp4', 'video/mp4', 10, 'seed-key')", [wsA]);
+    expect(await rows(dave, "select id from public.assets where id = '00000000-0000-0000-0000-0000000000a1'")).toHaveLength(1);
+    expect(await rows(erin, "select id from public.assets")).toHaveLength(0);
+    expect(await rejects(alice, "select storage_key from public.assets")).toMatch(/permission denied/);
+  });
+
+  it("completes an upload once and returns the same job on repeat", async () => {
+    const out = await as(carol, async () => {
+      const a = (await db.query(create())).rows[0];
+      const j1 = (await db.query("select public.complete_asset_upload($1) as j", [a.id])).rows[0].j;
+      const j2 = (await db.query("select public.complete_asset_upload($1) as j", [a.id])).rows[0].j;
+      const st = (await db.query("select status from public.assets where id = $1", [a.id])).rows[0].status;
+      const n = (await db.query("select count(*)::int as n from public.render_jobs where asset_id = $1", [a.id])).rows[0].n;
+      return { j1, j2, st, n };
+    });
+    expect(out.j1).toBeTruthy();
+    expect(out.j2).toBe(out.j1);
+    expect(out.st).toBe("uploaded");
+    expect(out.n).toBe(1);
+  });
+
+  it("refuses to complete an upload for viewers and other tenants", async () => {
+    const id = await as(alice, async () => (await db.query(create())).rows[0].id);
+    await db.query("insert into public.assets (id, workspace_id, original_filename, content_type, size_bytes, storage_key) values ('00000000-0000-0000-0000-0000000000a2', $1, 'seed2.mp4', 'video/mp4', 10, 'seed-key-2')", [wsA]);
+    const target = "00000000-0000-0000-0000-0000000000a2";
+    expect(id).toBeTruthy();
+    expect(await rejects(dave, "select public.complete_asset_upload($1)", [target])).toMatch(/Upload not found/);
+    expect(await rejects(erin, "select public.complete_asset_upload($1)", [target])).toMatch(/Upload not found/);
+  });
+
+  it("shows jobs to members only", async () => {
+    await db.query("insert into public.assets (id, workspace_id, original_filename, content_type, size_bytes, storage_key, status) values ('00000000-0000-0000-0000-0000000000a3', $1, 'seed3.mp4', 'video/mp4', 10, 'seed-key-3', 'uploaded')", [wsA]);
+    await db.query("insert into public.render_jobs (workspace_id, asset_id, kind) values ($1, '00000000-0000-0000-0000-0000000000a3', 'probe')", [wsA]);
+    expect((await rows(dave, "select 1 from public.render_jobs where asset_id = '00000000-0000-0000-0000-0000000000a3'")).length).toBe(1);
+    expect(await rows(erin, "select 1 from public.render_jobs")).toHaveLength(0);
+  });
+
+  it("prevents a second active job for the same asset", async () => {
+    await expect(db.query("insert into public.render_jobs (workspace_id, asset_id, kind) values ($1, '00000000-0000-0000-0000-0000000000a3', 'probe')", [wsA])).rejects.toThrow(/render_jobs_one_active_idx/);
+  });
+
+  it("blocks direct writes to assets and jobs, even by the owner", async () => {
+    expect(await rejects(alice, "insert into public.assets (workspace_id, original_filename, content_type, size_bytes, storage_key) values ($1, 'x.mp4', 'video/mp4', 1, 'k')", [wsA])).toMatch(/row-level security/);
+    expect(await as(alice, async () => (await db.query("update public.assets set status = 'ready'")).rowCount)).toBe(0);
+    expect(await as(alice, async () => (await db.query("delete from public.assets")).rowCount)).toBe(0);
+    expect(await rejects(alice, "insert into public.render_jobs (workspace_id, asset_id, kind) values ($1, '00000000-0000-0000-0000-0000000000a3', 'probe')", [wsA])).toMatch(/row-level security/);
+    expect(await as(alice, async () => (await db.query("update public.render_jobs set status = 'succeeded'")).rowCount)).toBe(0);
+  });
+});
+
 describe("audit log", () => {
   it("records membership and workspace events", async () => {
     const actions = (await rows(alice, "select action from public.audit_logs where workspace_id = $1", [wsA])).map((r) => r.action);

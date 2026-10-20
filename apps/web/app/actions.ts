@@ -1,10 +1,12 @@
 "use server";
 
-import { createWorkspaceSchema, inviteSchema, signInSchema, signUpSchema } from "@clipforge/shared";
+import { assetStorageKey, createWorkspaceSchema, inviteSchema, signInSchema, signUpSchema, uploadRequestSchema } from "@clipforge/shared";
+import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { env } from "@/lib/env";
 import { safeNext } from "@/lib/safe-next";
+import { enqueueProbe, mediaLimits, presignUpload, storedSize } from "@/lib/storage";
 import { createClient } from "@/lib/supabase/server";
 
 const text = (f: FormData, k: string) => String(f.get(k) ?? "");
@@ -119,4 +121,47 @@ export async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();
   redirect("/");
+}
+
+export type StartUpload =
+  | { ok: true; assetId: string; url: string; fields: Record<string, string> }
+  | { ok: false; error: string };
+
+const short = (m: string, fallback: string) => (m.length < 120 ? m : fallback);
+
+/** Step 1 of an upload: record it, then hand the browser a form post that S3 will accept only for this file. */
+export async function startUpload(slug: string, input: { filename: string; contentType: string; size: number }): Promise<StartUpload> {
+  const parsed = uploadRequestSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Choose an MP4, MOV, WebM or MKV video." };
+  const { filename, contentType, size } = parsed.data;
+  const limits = mediaLimits();
+  if (size > limits.maxBytes) return { ok: false, error: `That file is larger than the ${Math.round(limits.maxBytes / 1024 ** 3 * 10) / 10} GB limit.` };
+
+  const supabase = await createClient();
+  const { data: ws } = await supabase.from("workspaces").select("id").eq("slug", slug).single();
+  if (!ws) return { ok: false, error: "Workspace not found." };
+  const { data: asset, error } = await supabase
+    .rpc("create_asset_upload", { p_workspace: ws.id, p_filename: filename, p_content_type: contentType, p_size: size })
+    .single<{ id: string; storage_key: string }>();
+  if (error || !asset) return { ok: false, error: short(error?.message ?? "", "Could not start the upload.") };
+
+  const post = await presignUpload(asset.storage_key, contentType, size);
+  return { ok: true, assetId: asset.id, url: post.url, fields: post.fields };
+}
+
+/** Step 2: the browser says it finished. Do not trust that; look at storage, then queue the check. */
+export async function completeUpload(slug: string, assetId: string): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const { data: asset } = await supabase.from("assets").select("id, workspace_id, size_bytes").eq("id", assetId).single();
+  if (!asset) return { ok: false, error: "Upload not found." };
+
+  const actual = await storedSize(assetStorageKey(asset.workspace_id, asset.id));
+  if (actual !== Number(asset.size_bytes)) return { ok: false, error: "The upload did not finish. Please try again." };
+
+  const { data: jobId, error } = await supabase.rpc("complete_asset_upload", { p_asset: asset.id });
+  if (error || !jobId) return { ok: false, error: short(error?.message ?? "", "Could not finish the upload.") };
+  // If Redis is down the job stays `queued` in Postgres and the worker's reconcile loop picks it up.
+  await enqueueProbe(jobId as string).catch((e) => console.error("enqueue failed; reconcile will retry", String(e)));
+  revalidatePath(`/w/${slug}/assets`);
+  return { ok: true };
 }
