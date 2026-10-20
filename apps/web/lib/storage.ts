@@ -3,7 +3,7 @@ import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
-import { limitsFromEnv, MEDIA_QUEUE, parseStorageEnv, PROBE_JOB, probeJobOptions, type StorageEnv } from "@clipforge/shared";
+import { limitsFromEnv, MEDIA_QUEUE, parseStorageEnv, PROBE_JOB, TRANSCRIBE_JOB, jobOptions, type StorageEnv } from "@clipforge/shared";
 
 // Read lazily so pages that never touch storage still render when it is not configured.
 let cached: { env: StorageEnv; s3: S3Client; queue: Queue } | undefined;
@@ -52,4 +52,5 @@ export async function storedSize(key: string): Promise<number | null> {
   }
 }
 
-export const enqueueProbe = (jobId: string) => ctx().queue.add(PROBE_JOB, { jobId }, probeJobOptions(jobId));
+export const enqueueProbe = (jobId: string) => ctx().queue.add(PROBE_JOB, { jobId }, jobOptions(jobId));
+export const enqueueTranscribe = (jobId: string) => ctx().queue.add(TRANSCRIBE_JOB, { jobId }, jobOptions(jobId));

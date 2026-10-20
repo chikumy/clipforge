@@ -14,6 +14,9 @@ export type Deps = {
   store: ObjectStore;
   limits: MediaLimits;
   ffprobe?: string;
+  ffmpeg?: string;
+  /** Absent means transcription jobs fail (and retry) instead of inventing text. */
+  transcriber?: import("./transcribe.js").Transcriber;
   log?: (msg: string, extra?: Record<string, unknown>) => void;
 };
 

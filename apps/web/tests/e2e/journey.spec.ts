@@ -60,13 +60,17 @@ test("an editor uploads a video, it is checked and shown ready; a fake video is 
   await expect(page.getByText("No videos yet")).toBeVisible();
 
   await page.setInputFiles('input[type="file"]', process.env.E2E_VIDEO!);
-  await page.getByRole("button", { name: "Upload" }).click();
+  await page.getByRole("button", { name: "Upload", exact: true }).click();
   const ready = page.getByRole("row", { name: /ok\.mp4/ });
   await expect(ready).toContainText("Ready", { timeout: 60_000 });
   await expect(ready).toContainText("320×240");
 
+  // Transcription runs through the worker with the labelled mock provider.
+  await ready.getByRole("button", { name: "Transcribe" }).click();
+  await expect(ready).toContainText(/View \(\d+ segments\)/, { timeout: 60_000 });
+
   await page.setInputFiles('input[type="file"]', { name: "fake.mp4", mimeType: "video/mp4", buffer: Buffer.from("#EXTM3U\nfile:///etc/passwd\n") });
-  await page.getByRole("button", { name: "Upload" }).click();
+  await page.getByRole("button", { name: "Upload", exact: true }).click();
   const bad = page.getByRole("row", { name: /fake\.mp4/ });
   await expect(bad).toContainText("Rejected", { timeout: 60_000 });
   await expect(bad).toContainText("Unsupported video format");

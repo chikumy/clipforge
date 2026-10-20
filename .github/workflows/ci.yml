@@ -106,6 +106,8 @@ jobs:
             echo "DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres"
           } >> "$GITHUB_ENV"
       - name: Start worker
+        env:
+          TRANSCRIBE_PROVIDER: mock # CI only; the mock labels its output and is refused in production
         run: nohup pnpm --filter worker start > "$RUNNER_TEMP/worker.log" 2>&1 &
       - run: pnpm build
       - run: pnpm --filter web exec playwright install --with-deps chromium

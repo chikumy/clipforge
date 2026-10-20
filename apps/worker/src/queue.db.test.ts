@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Queue } from "bullmq";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { DEFAULT_LIMITS, MEDIA_QUEUE, PROBE_JOB, probeJobOptions } from "@clipforge/shared";
+import { DEFAULT_LIMITS, MEDIA_QUEUE, PROBE_JOB, jobOptions } from "@clipforge/shared";
 import { createTestDb } from "../../../supabase/tests/db-setup";
 import { reconcile, redisConnection, startWorker } from "./queue";
 import type { ObjectStore } from "./store";
@@ -62,8 +62,8 @@ maybe("media queue", () => {
 
   it("does not enqueue the same job twice", async () => {
     const { job } = await seed();
-    await queue.add(PROBE_JOB, { jobId: job }, probeJobOptions(job));
-    await queue.add(PROBE_JOB, { jobId: job }, probeJobOptions(job));
+    await queue.add(PROBE_JOB, { jobId: job }, jobOptions(job));
+    await queue.add(PROBE_JOB, { jobId: job }, jobOptions(job));
     expect(await queue.getJobCounts("waiting", "active", "completed", "failed", "delayed").then((c) => Object.values(c).reduce((a, b) => a + b, 0))).toBeGreaterThan(0);
     const j = await queue.getJob(job);
     expect(j?.id).toBe(job);
@@ -76,7 +76,7 @@ maybe("media queue", () => {
     for (const w of workers.splice(0)) await w.close();
     workers.push(startWorker({ db: t.db as never, store: brokenStore, limits: { ...DEFAULT_LIMITS } }, redisUrl!));
     const { asset, job } = await seed();
-    await queue.add(PROBE_JOB, { jobId: job }, probeJobOptions(job, 50)); // fast backoff for the test
+    await queue.add(PROBE_JOB, { jobId: job }, jobOptions(job, 50)); // fast backoff for the test
     await until(async () => (await t.db.query("select status from render_jobs where id = $1", [job])).rows[0].status === "failed");
     const j = (await t.db.query("select attempts, error from render_jobs where id = $1", [job])).rows[0];
     expect(j.attempts).toBe(3);
