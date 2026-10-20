@@ -2,15 +2,16 @@
 
 Multi-tenant SaaS for turning long videos into Shorts, generating branded videos, and managing client social publishing.
 
-**Status: Milestone 1** (accounts, workspaces, roles, invitations, row-level security). Video, billing and publishing features are not built yet. See [docs/milestone-1.md](docs/milestone-1.md) for what exists, what was tested, and known limits.
+**Status: Milestone 2a** (accounts, workspaces, roles, invitations, row-level security, private video upload and validation). Transcription, clips, rendering, billing and publishing are not built yet. See [docs/milestone-1.md](docs/milestone-1.md) and [docs/milestone-2a.md](docs/milestone-2a.md) for what exists, what was tested, and known limits. Setup: [docs/setup.md](docs/setup.md).
 
 ## Quick start
 
 ```bash
 pnpm install
 supabase start                    # local Auth + Postgres (needs Docker)
+docker compose up -d              # Redis + MinIO for uploads
 cp apps/web/.env.example apps/web/.env.local   # fill from `supabase status`
-pnpm dev
+pnpm dev                          # web; see docs/setup.md to run the worker
 ```
 
 ## Checks

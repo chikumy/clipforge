@@ -12,7 +12,9 @@ export type Permission =
   | "members.invite"
   | "members.manage"
   | "members.view"
-  | "audit.view";
+  | "audit.view"
+  | "assets.view"
+  | "assets.upload";
 
 const GRANTS: Record<Permission, readonly Role[]> = {
   "workspace.update": ["owner", "admin"],
@@ -21,6 +23,8 @@ const GRANTS: Record<Permission, readonly Role[]> = {
   "members.manage": ["owner", "admin"],
   "members.view": ROLES,
   "audit.view": ["owner", "admin"],
+  "assets.view": ROLES,
+  "assets.upload": ["owner", "admin", "editor"],
 };
 
 export const can = (role: Role | null | undefined, permission: Permission): boolean =>

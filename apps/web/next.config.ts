@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 const config: NextConfig = {
   transpilePackages: ["@clipforge/shared"],
   poweredByHeader: false,
+  serverExternalPackages: ["bullmq", "ioredis"],
   async headers() {
     return [{
       source: "/(.*)",
