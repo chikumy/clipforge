@@ -15,7 +15,7 @@
 | `pnpm test:s3` against **moto** (an S3 mock) | 3 passed, 2 skipped |
 | Typecheck, `next build`, smoke e2e | clean / clean / 5 passed |
 
-The 2 skipped S3 tests check that storage *refuses* a wrong-size or wrong-type upload. Moto does not enforce signed-form rules, so they only run against MinIO in CI. The browser upload end to end (page, signed form, MinIO, worker, status shown) is also only exercised in CI (`e2e-journey`).
+The 2 skipped S3 tests check that storage *refuses* a wrong-size or wrong-type upload. The mock (moto) does not enforce signed-form rules and MinIO's free Docker image is no longer published, so these have **never been run**: the exact-size limit relies on S3's documented `content-length-range` behaviour and the policy contents are only checked by decoding them. Run them against real S3 or R2 (`S3_ENFORCES_POLICY=true`) before launch. The browser upload end to end (page, signed form, mock S3, worker, status shown) is exercised only in CI (`e2e-journey`).
 
 ## Known limitations
 - The worker downloads the whole file before checking it (up to the size limit). Later: stream from a signed URL or check only what is needed.

@@ -35,18 +35,19 @@ jobs:
         env:
           TEST_DATABASE_URL: "postgres://postgres:postgres@127.0.0.1:54329/postgres"
           REDIS_URL: redis://127.0.0.1:6379
-      - name: Start MinIO
+      - name: Start S3 mock (moto)
         run: |
-          docker run -d --name minio -p 9000:9000 -e MINIO_ROOT_USER=minio -e MINIO_ROOT_PASSWORD=minio12345 minio/minio server /data
-          for i in $(seq 1 30); do curl -sf http://127.0.0.1:9000/minio/health/live && break; sleep 1; done
+          python3 -m venv "$RUNNER_TEMP/moto"
+          "$RUNNER_TEMP/moto/bin/pip" install --quiet "moto[server]"
+          nohup "$RUNNER_TEMP/moto/bin/moto_server" -p 5000 > "$RUNNER_TEMP/moto.log" 2>&1 &
+          for i in $(seq 1 30); do curl -s http://127.0.0.1:5000/moto-api/ >/dev/null && break; sleep 1; done
       - run: pnpm test:s3
         env:
-          S3_ENDPOINT: http://127.0.0.1:9000
+          S3_ENDPOINT: http://127.0.0.1:5000
           S3_FORCE_PATH_STYLE: "true"
           S3_BUCKET: cf-test
-          S3_ACCESS_KEY_ID: minio
-          S3_SECRET_ACCESS_KEY: minio12345
-          S3_ENFORCES_POLICY: "true"
+          S3_ACCESS_KEY_ID: test
+          S3_SECRET_ACCESS_KEY: test
           REDIS_URL: redis://127.0.0.1:6379
       - run: pnpm build
         env:
@@ -89,17 +90,19 @@ jobs:
           mkdir -p "$RUNNER_TEMP/media"
           ffmpeg -v error -f lavfi -i testsrc=duration=2:size=320x240:rate=15 -f lavfi -i sine=duration=2 -c:v libx264 -c:a aac -shortest "$RUNNER_TEMP/media/ok.mp4"
           echo "E2E_VIDEO=$RUNNER_TEMP/media/ok.mp4" >> "$GITHUB_ENV"
-      - name: Start MinIO and create the bucket
+      - name: Start S3 mock (moto)
         run: |
-          docker run -d --name minio -p 9000:9000 -e MINIO_ROOT_USER=minio -e MINIO_ROOT_PASSWORD=minio12345 minio/minio server /data
-          for i in $(seq 1 30); do curl -sf http://127.0.0.1:9000/minio/health/live && break; sleep 1; done
-          AWS_ACCESS_KEY_ID=minio AWS_SECRET_ACCESS_KEY=minio12345 AWS_DEFAULT_REGION=us-east-1 \
-            aws --endpoint-url http://127.0.0.1:9000 s3 mb s3://cf-e2e
+          python3 -m venv "$RUNNER_TEMP/moto"
+          "$RUNNER_TEMP/moto/bin/pip" install --quiet "moto[server]"
+          nohup "$RUNNER_TEMP/moto/bin/moto_server" -p 5000 > "$RUNNER_TEMP/moto.log" 2>&1 &
+          for i in $(seq 1 30); do curl -s http://127.0.0.1:5000/moto-api/ >/dev/null && break; sleep 1; done
+          AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1 \
+            aws --endpoint-url http://127.0.0.1:5000 s3 mb s3://cf-e2e
       - name: Storage and queue settings for the app and worker
         run: |
           {
-            echo "S3_ENDPOINT=http://127.0.0.1:9000"; echo "S3_FORCE_PATH_STYLE=true"; echo "S3_BUCKET=cf-e2e"
-            echo "S3_ACCESS_KEY_ID=minio"; echo "S3_SECRET_ACCESS_KEY=minio12345"; echo "REDIS_URL=redis://127.0.0.1:6379"
+            echo "S3_ENDPOINT=http://127.0.0.1:5000"; echo "S3_FORCE_PATH_STYLE=true"; echo "S3_BUCKET=cf-e2e"
+            echo "S3_ACCESS_KEY_ID=test"; echo "S3_SECRET_ACCESS_KEY=test"; echo "REDIS_URL=redis://127.0.0.1:6379"
             echo "DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres"
           } >> "$GITHUB_ENV"
       - name: Start worker

@@ -1,18 +1,15 @@
 # Local object storage and queue for uploads. Supabase itself runs via `supabase start`.
+# The S3 server is moto, a development mock: it does NOT enforce signed-upload size/type rules.
+# Production must use a real S3-compatible store (AWS S3, Cloudflare R2, ...).
 services:
   redis:
     image: redis:7
     ports: ["6379:6379"]
-  minio:
-    image: minio/minio
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minio
-      MINIO_ROOT_PASSWORD: minio12345
-    ports: ["9000:9000", "9001:9001"]
-  minio-setup:
-    image: minio/mc
-    depends_on: [minio]
-    entrypoint: >
-      /bin/sh -c "until mc alias set local http://minio:9000 minio minio12345; do sleep 1; done;
-      mc mb --ignore-existing local/clipforge-dev"
+  s3:
+    image: motoserver/moto:latest
+    ports: ["5000:5000"]
+  s3-setup:
+    image: amazon/aws-cli
+    depends_on: [s3]
+    environment: { AWS_ACCESS_KEY_ID: test, AWS_SECRET_ACCESS_KEY: test, AWS_DEFAULT_REGION: us-east-1 }
+    entrypoint: ["/bin/sh", "-c", "until aws --endpoint-url http://s3:5000 s3 mb s3://clipforge-dev; do sleep 1; done"]
