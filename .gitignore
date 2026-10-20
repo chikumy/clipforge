@@ -1,0 +1,16 @@
+node_modules/
+.next/
+.env
+.env.*
+!.env.example
+coverage/
+playwright-report/
+test-results/
+*.log
+.DS_Store
+
+# local tool state
+.claude-flow/
+.swarm/
+ruvector.db
+*.tsbuildinfo
