@@ -3,7 +3,7 @@
 import { contentTypeFor } from "@clipforge/shared";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { completeUpload, startUpload } from "@/app/actions";
+import { completeUpload, requestTranscription, startUpload } from "@/app/actions";
 
 /** Re-reads the list while any video is still being checked, so status updates appear on their own. */
 export function AutoRefresh({ active }: { active: boolean }) {
@@ -67,5 +67,24 @@ export function UploadForm({ slug }: { slug: string }) {
       {error && <p role="alert" className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm">{error}</p>}
       <button className="btn" disabled={busy}>{busy ? `Uploading ${pct}%` : "Upload"}</button>
     </form>
+  );
+}
+
+export function TranscribeButton({ slug, assetId }: { slug: string; assetId: string }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  async function go() {
+    setBusy(true); setError(undefined);
+    const r = await requestTranscription(slug, assetId);
+    if (!r.ok) setError(r.error);
+    setBusy(false);
+    router.refresh();
+  }
+  return (
+    <div>
+      <button type="button" className="btn" onClick={go} disabled={busy}>{busy ? "Starting…" : "Transcribe"}</button>
+      {error && <p role="alert" className="mt-1 text-sm text-red-600">{error}</p>}
+    </div>
   );
 }

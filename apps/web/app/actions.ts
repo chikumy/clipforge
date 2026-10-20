@@ -6,7 +6,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { env } from "@/lib/env";
 import { safeNext } from "@/lib/safe-next";
-import { enqueueProbe, mediaLimits, presignUpload, storedSize } from "@/lib/storage";
+import { enqueueProbe, enqueueTranscribe, mediaLimits, presignUpload, storedSize } from "@/lib/storage";
 import { createClient } from "@/lib/supabase/server";
 
 const text = (f: FormData, k: string) => String(f.get(k) ?? "");
@@ -162,6 +162,16 @@ export async function completeUpload(slug: string, assetId: string): Promise<{ o
   if (error || !jobId) return { ok: false, error: short(error?.message ?? "", "Could not finish the upload.") };
   // If Redis is down the job stays `queued` in Postgres and the worker's reconcile loop picks it up.
   await enqueueProbe(jobId as string).catch((e) => console.error("enqueue failed; reconcile will retry", String(e)));
+  revalidatePath(`/w/${slug}/assets`);
+  return { ok: true };
+}
+
+/** Asks for a transcript of a ready video. The database checks role, status and audio; Redis is only a nudge. */
+export async function requestTranscription(slug: string, assetId: string): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const { data: jobId, error } = await supabase.rpc("request_transcription", { p_asset: assetId });
+  if (error || !jobId) return { ok: false, error: short(error?.message ?? "", "Could not start the transcript.") };
+  await enqueueTranscribe(jobId as string).catch((e) => console.error("enqueue failed; reconcile will retry", String(e)));
   revalidatePath(`/w/${slug}/assets`);
   return { ok: true };
 }

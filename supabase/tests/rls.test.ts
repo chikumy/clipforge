@@ -371,6 +371,57 @@ describe("assets and jobs", () => {
   });
 });
 
+describe("transcription requests", () => {
+  const A = "00000000-0000-0000-0000-0000000000b1"; // ready, has audio
+  const SILENT = "00000000-0000-0000-0000-0000000000b2";
+  const PENDING = "00000000-0000-0000-0000-0000000000b3";
+  const seed = (id: string, status: string, probe: object) =>
+    db.query(
+      "insert into public.assets (id, workspace_id, original_filename, content_type, size_bytes, storage_key, status, probe) values ($1, $2, 't.mp4', 'video/mp4', 10, $3, $4, $5)",
+      [id, wsA, `tk-${id}`, status, JSON.stringify(probe)],
+    );
+
+  beforeAll(async () => {
+    await seed(A, "ready", { audioCodec: "aac", durationSeconds: 10 });
+    await seed(SILENT, "ready", { audioCodec: null, durationSeconds: 10 });
+    await seed(PENDING, "uploaded", {});
+  });
+
+  it("lets an editor request once; repeating returns the same job", async () => {
+    const out = await as(carol, async () => {
+      const q = async () => (await db.query("select public.request_transcription($1) as j", [A])).rows[0].j as string;
+      const j1 = await q();
+      const j2 = await q();
+      const n = (await db.query("select count(*)::int as n from public.render_jobs where asset_id = $1 and kind = 'transcribe'", [A])).rows[0].n;
+      await db.query("reset role"); // audit rows are admin-only; read them as the superuser
+      const audits = (await db.query("select count(*)::int as n from public.audit_logs where action = 'asset.transcription_requested' and target_id = $1", [A])).rows[0].n;
+      return { same: j1 === j2, n, audits };
+    });
+    expect(out).toEqual({ same: true, n: 1, audits: 1 });
+  });
+
+  it("refuses viewers and other tenants", async () => {
+    expect(await rejects(dave, "select public.request_transcription($1)", [A])).toMatch(/Video not found/);
+    expect(await rejects(erin, "select public.request_transcription($1)", [A])).toMatch(/Video not found/);
+  });
+
+  it("refuses videos that are not ready, have no audio, or already have a transcript", async () => {
+    expect(await rejects(carol, "select public.request_transcription($1)", [PENDING])).toMatch(/finish checking/);
+    expect(await rejects(carol, "select public.request_transcription($1)", [SILENT])).toMatch(/no audio/);
+    await db.query("insert into public.transcripts (workspace_id, asset_id, provider, is_mock, segments) values ($1, $2, 'mock', true, '[]')", [wsA, SILENT]);
+    await db.query("update public.assets set probe = '{\"audioCodec\":\"aac\"}' where id = $1", [SILENT]);
+    expect(await rejects(carol, "select public.request_transcription($1)", [SILENT])).toMatch(/already has a transcript/);
+  });
+
+  it("shows transcripts to members only and blocks direct writes", async () => {
+    expect(await rows(dave, "select 1 from public.transcripts where asset_id = $1", [SILENT])).toHaveLength(1);
+    expect(await rows(erin, "select 1 from public.transcripts")).toHaveLength(0);
+    expect(await rejects(alice, "insert into public.transcripts (workspace_id, asset_id, provider, segments) values ($1, $2, 'x', '[]')", [wsA, A])).toMatch(/row-level security/);
+    expect(await as(alice, async () => (await db.query("update public.transcripts set provider = 'x'")).rowCount)).toBe(0);
+    expect(await as(alice, async () => (await db.query("delete from public.transcripts")).rowCount)).toBe(0);
+  });
+});
+
 describe("audit log", () => {
   it("records membership and workspace events", async () => {
     const actions = (await rows(alice, "select action from public.audit_logs where workspace_id = $1", [wsA])).map((r) => r.action);

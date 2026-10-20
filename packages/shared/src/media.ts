@@ -2,11 +2,12 @@ import { z } from "zod";
 
 export const MEDIA_QUEUE = "media";
 export const PROBE_JOB = "probe";
-export const probeJobData = z.object({ jobId: z.string().uuid() });
-export type ProbeJobData = z.infer<typeof probeJobData>;
+export const TRANSCRIBE_JOB = "transcribe";
+export const jobData = z.object({ jobId: z.string().uuid() });
+export type JobData = z.infer<typeof jobData>;
 
-/** Same options wherever a probe job is enqueued. jobId makes adding the same render job twice a no-op. */
-export const probeJobOptions = (jobId: string, backoffMs = 5000) => ({
+/** Same options wherever a media job is enqueued. jobId makes adding the same render job twice a no-op. */
+export const jobOptions = (jobId: string, backoffMs = 5000) => ({
   jobId,
   attempts: 3,
   backoff: { type: "exponential" as const, delay: backoffMs },
@@ -112,4 +113,20 @@ const BY_EXTENSION: Record<string, (typeof VIDEO_CONTENT_TYPES)[number]> = {
 export function contentTypeFor(filename: string, browserType: string): string {
   if ((VIDEO_CONTENT_TYPES as readonly string[]).includes(browserType)) return browserType;
   return BY_EXTENSION[filename.split(".").pop()?.toLowerCase() ?? ""] ?? browserType;
+}
+
+export const MAX_SEGMENTS = 20_000;
+export const segmentSchema = z.object({
+  start: z.number().min(0), end: z.number().min(0), text: z.string().trim().min(1).max(2000),
+}).refine((s) => s.end >= s.start, "segment ends before it starts");
+export type Segment = z.infer<typeof segmentSchema>;
+/** Checks provider output before it is stored: bounded, in order, and no longer than the video. */
+export function validateSegments(raw: unknown, durationSeconds: number): Segment[] {
+  const segments = z.array(segmentSchema).max(MAX_SEGMENTS).parse(raw);
+  let prevStart = 0;
+  for (const s of segments) {
+    if (s.start < prevStart || s.end > durationSeconds + 1) throw new Error("transcript segments are out of order or outside the video");
+    prevStart = s.start;
+  }
+  return segments;
 }

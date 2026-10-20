@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assetStorageKey, contentTypeFor, DEFAULT_LIMITS, parseStorageEnv, sniffContainer, validateProbe, type FfprobeOutput, type MediaLimits } from "./index";
+import { assetStorageKey, contentTypeFor, DEFAULT_LIMITS, parseStorageEnv, sniffContainer, validateProbe, validateSegments, type FfprobeOutput, type MediaLimits } from "./index";
 
 const limits: MediaLimits = { ...DEFAULT_LIMITS };
 const good: FfprobeOutput = {
@@ -80,4 +80,17 @@ describe("contentTypeFor / assetStorageKey", () => {
     expect(contentTypeFor("notes.exe", "")).toBe("");
   });
   it("builds keys from ids only", () => expect(assetStorageKey("w", "a")).toBe("workspaces/w/assets/a/source"));
+});
+
+describe("validateSegments", () => {
+  it("accepts ordered segments inside the video", () => {
+    expect(validateSegments([{ start: 0, end: 2, text: "a" }, { start: 2, end: 4, text: "b" }], 4)).toHaveLength(2);
+  });
+  it("rejects out-of-order, overlong, empty or reversed segments", () => {
+    expect(() => validateSegments([{ start: 3, end: 4, text: "a" }, { start: 1, end: 2, text: "b" }], 10)).toThrow();
+    expect(() => validateSegments([{ start: 0, end: 50, text: "a" }], 10)).toThrow();
+    expect(() => validateSegments([{ start: 0, end: 1, text: "  " }], 10)).toThrow();
+    expect(() => validateSegments([{ start: 2, end: 1, text: "a" }], 10)).toThrow();
+    expect(() => validateSegments("nope", 10)).toThrow();
+  });
 });
